@@ -129,11 +129,17 @@
       els.progressLabel.textContent = `Konvertuji... ${pct}%`;
     });
 
+    // Zabráníme prohlížeči otevřít soubor při přetažení kamkoli na stránku
+    document.addEventListener('dragover', e => e.preventDefault());
+    document.addEventListener('drop',     e => e.preventDefault());
+
     els.dropZone.addEventListener('click', () => els.fileInput.click());
-    els.dropZone.addEventListener('dragover', e => { e.preventDefault(); els.dropZone.classList.add('drag-over'); });
-    els.dropZone.addEventListener('dragleave', () => els.dropZone.classList.remove('drag-over'));
+    els.dropZone.addEventListener('dragenter', e => { e.preventDefault(); els.dropZone.classList.add('drag-over'); });
+    els.dropZone.addEventListener('dragover',  e => { e.preventDefault(); els.dropZone.classList.add('drag-over'); });
+    els.dropZone.addEventListener('dragleave', e => { if (!els.dropZone.contains(e.relatedTarget)) els.dropZone.classList.remove('drag-over'); });
     els.dropZone.addEventListener('drop', e => {
       e.preventDefault();
+      e.stopPropagation();
       els.dropZone.classList.remove('drag-over');
       if (e.dataTransfer.files[0]) selectFile(e.dataTransfer.files[0]);
     });
