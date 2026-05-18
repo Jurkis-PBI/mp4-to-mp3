@@ -82,12 +82,12 @@
     <h1>MP4 → MP3</h1>
     <p class="subtitle">Zmenšte nahrávku před nahráním do sdíleného Drive</p>
 
-    <div class="drop-zone" id="dropZone">
+    <label class="drop-zone" id="dropZone" for="fileInput">
       <div class="drop-icon">🎬</div>
       <p class="drop-label">Přetáhněte soubor sem nebo <strong>klikněte pro výběr</strong></p>
       <p class="file-selected" id="fileSelected"></p>
-    </div>
-    <input type="file" id="fileInput" accept="video/*,audio/*">
+    </label>
+    <input type="file" id="fileInput" accept="video/*,audio/*" style="display:none">
 
     <button class="btn btn-primary" id="btnConvert" disabled>Konvertovat na MP3</button>
 
@@ -129,20 +129,18 @@
       els.progressLabel.textContent = `Konvertuji... ${pct}%`;
     });
 
-    // Zabráníme prohlížeči otevřít soubor při přetažení kamkoli na stránku
+    // Zachytíme drop kdekoliv na stránce — zastavíme navigaci a zpracujeme soubor
     document.addEventListener('dragover', e => e.preventDefault());
-    document.addEventListener('drop',     e => e.preventDefault());
-
-    els.dropZone.addEventListener('click', () => els.fileInput.click());
-    els.dropZone.addEventListener('dragenter', e => { e.preventDefault(); els.dropZone.classList.add('drag-over'); });
-    els.dropZone.addEventListener('dragover',  e => { e.preventDefault(); els.dropZone.classList.add('drag-over'); });
-    els.dropZone.addEventListener('dragleave', e => { if (!els.dropZone.contains(e.relatedTarget)) els.dropZone.classList.remove('drag-over'); });
-    els.dropZone.addEventListener('drop', e => {
+    document.addEventListener('drop', e => {
       e.preventDefault();
-      e.stopPropagation();
+      const f = e.dataTransfer?.files?.[0];
+      if (f) selectFile(f);
       els.dropZone.classList.remove('drag-over');
-      if (e.dataTransfer.files[0]) selectFile(e.dataTransfer.files[0]);
     });
+
+    document.addEventListener('dragenter', () => els.dropZone.classList.add('drag-over'));
+    document.addEventListener('dragleave', e => { if (!e.relatedTarget) els.dropZone.classList.remove('drag-over'); });
+
     els.fileInput.addEventListener('change', e => { if (e.target.files[0]) selectFile(e.target.files[0]); });
 
     function selectFile(f) {
