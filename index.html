@@ -30,6 +30,7 @@
     .subtitle { font-size: 0.85rem; color: #888; margin-bottom: 32px; }
 
     .drop-zone {
+      display: block;
       border: 2px dashed #e0e0e0;
       border-radius: 10px;
       padding: 36px 24px;
@@ -103,7 +104,12 @@
 
   <script type="module">
     import { FFmpeg } from './lib/index.js';
-    import { fetchFile, toBlobURL } from './lib/ffmpeg-util.js';
+
+    const fetchFile = async (file) => new Uint8Array(await file.arrayBuffer());
+    const toBlobURL = async (url, mimeType) => {
+      const buf = await (await fetch(url)).arrayBuffer();
+      return URL.createObjectURL(new Blob([buf], { type: mimeType }));
+    };
 
     const el = id => document.getElementById(id);
     const els = {
