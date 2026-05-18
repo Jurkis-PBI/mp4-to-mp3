@@ -162,10 +162,12 @@
       try {
         if (!ffmpegLoaded) {
           els.progressLabel.textContent = 'Načítám ffmpeg (první spuštění ~30 s)...';
-          const base = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+          const coreBase   = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+          const ffmpegBase = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/esm';
           await ffmpeg.load({
-            coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
-            wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
+            coreURL:   await toBlobURL(`${coreBase}/ffmpeg-core.js`,   'text/javascript'),
+            wasmURL:   await toBlobURL(`${coreBase}/ffmpeg-core.wasm`, 'application/wasm'),
+            workerURL: await toBlobURL(`${ffmpegBase}/worker.js`,      'text/javascript'),
           });
           ffmpegLoaded = true;
         }
