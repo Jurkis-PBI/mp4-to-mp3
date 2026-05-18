@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MP4 → MP3</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f0f0f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 40px;
+      width: 100%;
+      max-width: 440px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+    }
+
+    h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px; }
+    .subtitle { font-size: 0.85rem; color: #888; margin-bottom: 32px; }
+
+    .drop-zone {
+      border: 2px dashed #e0e0e0;
+      border-radius: 10px;
+      padding: 36px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      user-select: none;
+    }
+    .drop-zone:hover { border-color: #bbb; background: #fafafa; }
+    .drop-zone.drag-over { border-color: #888; background: #f5f5f5; }
+    .drop-zone.ready { border-color: #16a34a; background: #f0fdf4; }
+
+    .drop-icon { font-size: 1.8rem; margin-bottom: 10px; }
+    .drop-label { font-size: 0.875rem; color: #555; line-height: 1.5; }
+    .drop-label strong { color: #222; }
+    .file-selected { font-size: 0.8rem; color: #16a34a; margin-top: 8px; font-weight: 500; }
+
+    input[type="file"] { display: none; }
+
+    .btn {
+      display: block;
+      width: 100%;
+      margin-top: 16px;
+      padding: 11px 16px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s, background 0.15s;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: #111; color: #fff; }
+    .btn-primary:not(:disabled):hover { background: #333; }
+    .btn-success { background: #16a34a; color: #fff; }
+    .btn-success:hover { background: #15803d; }
+
+    .progress { margin-top: 20px; display: none; }
+    .progress-bar { height: 3px; background: #eee; border-radius: 2px; overflow: hidden; }
+    .progress-fill { height: 100%; background: #111; width: 0; transition: width 0.4s ease; }
+    .progress-label { font-size: 0.8rem; color: #888; margin-top: 6px; }
+
+    .result { margin-top: 8px; font-size: 0.8rem; color: #888; text-align: center; min-height: 18px; }
+    .result.error { color: #dc2626; }
+    .result.success { color: #16a34a; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>MP4 → MP3</h1>
+    <p class="subtitle">Zmenšte nahrávku před nahráním do sdíleného Drive</p>
+
+    <div class="drop-zone" id="dropZone">
+      <div class="drop-icon">🎬</div>
+      <p class="drop-label">Přetáhněte soubor sem nebo <strong>klikněte pro výběr</strong></p>
+      <p class="file-selected" id="fileSelected"></p>
+    </div>
+    <input type="file" id="fileInput" accept="video/*,audio/*">
+
+    <button class="btn btn-primary" id="btnConvert" disabled>Konvertovat na MP3</button>
+
+    <div class="progress" id="progress">
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <p class="progress-label" id="progressLabel"></p>
+    </div>
+
+    <button class="btn btn-success" id="btnDownload" style="display:none">⬇ Stáhnout MP3</button>
+
+    <p class="result" id="result"></p>
+  </div>
+
+  <script type="module">
+    import { FFmpeg } from 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/esm/index.js';
+    import { fetchFile, toBlobURL } from 'https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js';
+
+    const el = id => document.getElementById(id);
+    const els = {
+      dropZone:      el('dropZone'),
+      fileInput:     el('fileInput'),
+      fileSelected:  el('fileSelected'),
+      btnConvert:    el('btnConvert'),
+      btnDownload:   el('btnDownload'),
+      progress:      el('progress'),
+      progressFill:  el('progressFill'),
+      progressLabel: el('progressLabel'),
+      result:        el('result'),
+    };
+
+    let file = null;
+    let outputURL = null;
+    let ffmpegLoaded = false;
+    const ffmpeg = new FFmpeg();
+
+    ffmpeg.on('progress', ({ progress }) => {
+      const pct = Math.min(Math.round(progress * 100), 99);
+      els.progressFill.style.width = pct + '%';
+      els.progressLabel.textContent = `Konvertuji... ${pct}%`;
+    });
+
+    els.dropZone.addEventListener('click', () => els.fileInput.click());
+    els.dropZone.addEventListener('dragover', e => { e.preventDefault(); els.dropZone.classList.add('drag-over'); });
+    els.dropZone.addEventListener('dragleave', () => els.dropZone.classList.remove('drag-over'));
+    els.dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      els.dropZone.classList.remove('drag-over');
+      if (e.dataTransfer.files[0]) selectFile(e.dataTransfer.files[0]);
+    });
+    els.fileInput.addEventListener('change', e => { if (e.target.files[0]) selectFile(e.target.files[0]); });
+
+    function selectFile(f) {
+      file = f;
+      els.fileSelected.textContent = `${f.name} (${(f.size / 1024 / 1024).toFixed(0)} MB)`;
+      els.dropZone.classList.add('ready');
+      els.btnConvert.disabled = false;
+      els.btnDownload.style.display = 'none';
+      els.result.textContent = '';
+      els.result.className = 'result';
+    }
+
+    els.btnConvert.addEventListener('click', async () => {
+      if (!file) return;
+
+      els.btnConvert.disabled = true;
+      els.btnDownload.style.display = 'none';
+      els.progress.style.display = 'block';
+      els.progressFill.style.width = '0%';
+      els.result.textContent = '';
+      els.result.className = 'result';
+
+      try {
+        if (!ffmpegLoaded) {
+          els.progressLabel.textContent = 'Načítám ffmpeg (první spuštění ~30 s)...';
+          const base = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+          await ffmpeg.load({
+            coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
+            wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
+          });
+          ffmpegLoaded = true;
+        }
+
+        els.progressLabel.textContent = 'Načítám soubor do paměti...';
+        els.progressFill.style.width = '5%';
+
+        const ext = file.name.split('.').pop();
+        const inputName = `vstup.${ext}`;
+        const outputName = file.name.replace(/\.[^.]+$/, '') + '.mp3';
+
+        await ffmpeg.writeFile(inputName, await fetchFile(file));
+        els.progressFill.style.width = '10%';
+
+        await ffmpeg.exec(['-i', inputName, '-map', 'a', '-codec:a', 'libmp3lame', '-b:a', '64k', outputName]);
+
+        const data = await ffmpeg.readFile(outputName);
+        const blob = new Blob([data.buffer], { type: 'audio/mpeg' });
+        if (outputURL) URL.revokeObjectURL(outputURL);
+        outputURL = URL.createObjectURL(blob);
+
+        els.progressFill.style.width = '100%';
+        els.progressLabel.textContent = 'Hotovo!';
+
+        els.btnDownload.textContent = `⬇ Stáhnout ${outputName}`;
+        els.btnDownload.onclick = () => {
+          const a = document.createElement('a');
+          a.href = outputURL;
+          a.download = outputName;
+          a.click();
+        };
+        els.btnDownload.style.display = 'block';
+
+        const origMB = (file.size / 1024 / 1024).toFixed(0);
+        const newMB  = (blob.size  / 1024 / 1024).toFixed(1);
+        els.result.textContent = `${origMB} MB → ${newMB} MB`;
+        els.result.className = 'result success';
+
+        await ffmpeg.deleteFile(inputName);
+        await ffmpeg.deleteFile(outputName);
+
+      } catch (err) {
+        console.error(err);
+        els.result.textContent = 'Chyba: ' + err.message;
+        els.result.className = 'result error';
+        els.progressLabel.textContent = '';
+      }
+
+      els.btnConvert.disabled = false;
+    });
+  </script>
+</body>
+</html>
